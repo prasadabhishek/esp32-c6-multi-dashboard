@@ -6,17 +6,18 @@
 #include <math.h>
 #include <time.h>
 
+#include "config.h"
 #include "airports_db.h"
 
-// Wi-Fi Credentials (Placeholders for public repository)
-const char* WIFI_SSID = "YOUR_WIFI_SSID";
-const char* WIFI_PASS = "YOUR_WIFI_PASSWORD";
+// Wi-Fi Credentials from config.h
+const char* WIFI_SSID = ::WIFI_SSID;
+const char* WIFI_PASS = ::WIFI_PASSWORD;
 
-// Dynamic IP-Geolocation (Auto-detects location via IP-API at runtime)
-double current_lat = 0.0;
-double current_lon = 0.0;
-String current_location_name = "LOCATING...";
-bool location_found = false;
+// Location Settings from config.h
+double current_lat = CUSTOM_LATITUDE;
+double current_lon = CUSTOM_LONGITUDE;
+String current_location_name = CUSTOM_LOCATION_NAME;
+bool location_found = !USE_AUTO_IP_GEOLOCATION;
 
 // Display Pin Definitions for Waveshare ESP32-C6 LCD 1.47"
 #define TFT_BL   23
@@ -49,7 +50,7 @@ enum DisplayScreen {
 };
 DisplayScreen current_screen = SCREEN_WEATHER;
 uint32_t last_screen_switch = 0;
-const uint32_t ROTATION_INTERVAL_MS = 6000;
+const uint32_t ROTATION_INTERVAL_MS = SCREEN_ROTATION_MS;
 
 // Interrupt Flag for BOOT Button
 volatile bool g_btn_interrupt_flag = false;
@@ -186,8 +187,8 @@ void updateLocation() {
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, payload);
     if (!err) {
-      current_lat = doc["lat"] | 0.0;
-      current_lon = doc["lon"] | 0.0;
+      current_lat = doc["lat"] | CUSTOM_LATITUDE;
+      current_lon = doc["lon"] | CUSTOM_LONGITUDE;
       String city = doc["city"] | "CITY";
       String region = doc["region"] | "REGION";
       city.toUpperCase(); region.toUpperCase();
@@ -198,11 +199,11 @@ void updateLocation() {
   }
   http.end();
   if (!location_found) {
-    current_location_name = "LOCATION AUTO-IP";
+    current_location_name = CUSTOM_LOCATION_NAME;
   }
 }
 
-// Fetch Weather Data (Celsius & km/h)
+// Fetch Weather Data (Celsius vs Fahrenheit per config.h)
 void fetchWeatherData() {
   if (WiFi.status() != WL_CONNECTED || !location_found) return;
   HTTPClient http;
@@ -369,7 +370,7 @@ void networkWorkerTask(void *pvParameters) {
   for (;;) {
     if (WiFi.status() == WL_CONNECTED) {
       wifi_reconnect_backoff = 1000;
-      if (!location_found) updateLocation();
+      if (USE_AUTO_IP_GEOLOCATION && !location_found) updateLocation();
 
       uint32_t now = millis();
       if (now - last_flight >= 15000)   { last_flight = now; fetchOverheadFlights(); }
@@ -481,7 +482,7 @@ void renderFlightScreen() {
   canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name.substring(0, 18));
 }
 
-// 2. WEATHER SCREEN (CELSIUS)
+// 2. WEATHER SCREEN (CELSIUS vs FAHRENHEIT per config.h)
 void renderWeatherScreen() {
   canvas->fillScreen(0x0821);
   uint16_t c_cyan = 0x07FF, c_amber = 0xFBE0, c_green = 0x07E0, c_white = 0xFFFF, c_gray = 0x7BEF, c_dark = 0x18E3;
@@ -492,8 +493,15 @@ void renderWeatherScreen() {
   canvas->drawRoundRect(6, 38, SCREEN_W - 12, 70, 6, c_amber); canvas->fillRoundRect(7, 39, SCREEN_W - 14, 68, 6, 0x2120);
   canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 46); canvas->print("TEMPERATURE");
   canvas->setTextColor(c_white); canvas->setTextSize(4); canvas->setCursor(14, 62);
-  if (current_weather.valid) { canvas->printf("%.1f*", current_weather.temp_c); canvas->setTextSize(2); canvas->setTextColor(c_amber); canvas->print("C"); }
-  else { canvas->print("--*"); }
+
+  if (current_weather.valid) {
+    float display_temp = USE_CELSIUS ? current_weather.temp_c : ((current_weather.temp_c * 9.0f / 5.0f) + 32.0f);
+    canvas->printf("%.1f*", display_temp);
+    canvas->setTextSize(2); canvas->setTextColor(c_amber);
+    canvas->print(USE_CELSIUS ? "C" : "F");
+  } else {
+    canvas->print("--*");
+  }
 
   canvas->drawRoundRect(6, 116, SCREEN_W - 12, 44, 4, c_dark); canvas->fillRoundRect(7, 117, SCREEN_W - 14, 42, 4, 0x1084);
   canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 122); canvas->print("CONDITION");
@@ -622,7 +630,7 @@ void renderSunMoonScreen() {
 
   canvas->drawRoundRect(6, 36, SCREEN_W - 12, 50, 4, c_dark); canvas->fillRoundRect(7, 37, SCREEN_W - 14, 48, 4, 0x2120);
   canvas->setTextColor(c_amber); canvas->setTextSize(1); canvas->setCursor(14, 42); canvas->print("SUNRISE");
-  canvas->setTextColor(c_white); canvas->setTextSize(2); canvas=setCursor(14, 56); canvas->print("5:48 AM");
+  canvas->setTextColor(c_white); canvas->setTextSize(2); canvas->setCursor(14, 56); canvas->print("5:48 AM");
 
   canvas->drawRoundRect(6, 92, SCREEN_W - 12, 50, 4, c_dark); canvas->fillRoundRect(7, 93, SCREEN_W - 14, 48, 4, 0x1084);
   canvas->setTextColor(c_pink); canvas->setTextSize(1); canvas->setCursor(14, 98); canvas->print("SUNSET");
@@ -665,9 +673,9 @@ void setup() {
   pinMode(BOOT_BTN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(BOOT_BTN), handleBootButtonISR, FALLING);
 
-  // 30% PWM Backlight Dimming (LEDC duty 75/255 = 30% brightness for ultra-cool operation)
+  // Set Backlight Brightness from config.h
   ledcAttach(TFT_BL, 5000, 8);
-  ledcWrite(TFT_BL, 75);
+  ledcWrite(TFT_BL, BACKLIGHT_BRIGHTNESS);
 
   display->begin(); display->fillScreen(0x0000); canvas->begin();
 
@@ -703,7 +711,7 @@ void loop() {
     }
   }
 
-  // 2. Automatic 6-second rotation
+  // 2. Automatic screen rotation per config.h
   if (millis() - last_screen_switch >= ROTATION_INTERVAL_MS) {
     last_screen_switch = millis();
     current_screen = (DisplayScreen)((current_screen + 1) % NUM_SCREENS);
