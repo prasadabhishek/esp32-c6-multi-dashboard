@@ -1,84 +1,74 @@
-# 🔄 ESP32-C6 Smart Multi-Dashboard Rotating Display
+# ESP32-C6 Multi-Dashboard Display (1.47" ST7789 LCD)
 
-An autonomous, multi-dashboard rotating display system for **ESP32-C6** microcontrollers with an **ST7789 IPS LCD** (172x320 resolution). 
-
-Features **Thermal Control & PWM Dimming**, **BOOT Button Manual Skipping**, and rotates between live **Overhead Flight Tracking**, **Local Weather (Celsius)**, **SPY/SMH/SPMO Stock Ticker**, **SpaceX/NASA Rocket Launch Countdown**, **Desk Clock with Chip Thermals**, and **3D Graphical Moon Phase & Solar Data**!
+An ultra-efficient, low-power, double-buffered multi-dashboard smart display firmware for the **Waveshare ESP32-C6 LCD 1.47" (172x320 IPS)** written in C++ with Arduino GFX and FreeRTOS.
 
 ---
 
-## 🖼️ Display Gallery (All 6 Rotating Screens)
+## 📸 Dashboard Screens Gallery
 
-| Screen 1: Flight Tracker | Screen 2: Local Weather | Screen 3: Stocks & ETFs |
+All high-definition screenshots are organized in the [`screenshots/`](screenshots/) directory:
+
+| ✈️ 1. Flight Radar Scanner | 🌤️ 2. Weather & Air Quality | 📈 3. Stock & ETF Badges |
 | :---: | :---: | :---: |
-| <img src="docs/screen1_flight.png" width="180" /> | <img src="docs/screen2_weather.png" width="180" /> | <img src="docs/screen3_stocks.png" width="180" /> |
-| Overhead ADS-B Flight Radar | Temp (°C), Wind (KM/H), AQI | Real-time SPY, SMH, SPMO |
+| <img src="screenshots/screen1_flight.png" width="220" alt="Flight Tracker Screen"/> | <img src="screenshots/screen2_weather.png" width="220" alt="Weather Screen"/> | <img src="screenshots/screen3_stocks.png" width="220" alt="Stock Screen"/> |
 
-| Screen 4: Rocket Launch | Screen 5: Desk Clock & Thermals | Screen 6: Solar & Moon Sphere |
+| 🚀 4. Rocket Launch Countdown | ⏰ 5. Desk Clock & Thermals | 🌙 6. 3D Lunar & Solar Tracker |
 | :---: | :---: | :---: |
-| <img src="docs/screen4_rocket.png" width="180" /> | <img src="docs/screen5_clock.png" width="180" /> | <img src="docs/screen6_solar.png" width="180" /> |
-| SpaceX Falcon 9 T-Minus Clock | NTP Time & ESP32 Die Temp | Graphical Moon Sphere |
+| <img src="screenshots/screen4_rocket.png" width="220" alt="Rocket Screen"/> | <img src="screenshots/screen5_clock.png" width="220" alt="Desk Clock Screen"/> | <img src="screenshots/screen6_solar.png" width="220" alt="Moon Phase Screen"/> |
 
 ---
 
-## 🌟 Key Features
+## ✨ Key Features
 
-### 1. 🔥 ESP32-C6 Thermal & Power Management
-- **PWM Backlight Dimming:** Uses LEDC PWM on GPIO23 set to ~65% duty cycle. Reduces LCD backlight heat and board power consumption by **~35%**, keeping the chip running cool!
-- **On-Chip Die Temp Monitoring:** Displays real-time silicon temperature (`38.5 °C`) on Screen 5.
-
-### 2. 🔘 Manual BOOT Button Controls (GPIO9)
-- Press the onboard `GPIO9 BOOT` button at any time to **instantly skip to the next dashboard screen**!
-
-### 3. 📈 Stocks & ETF Ticker (SPY, SMH, SPMO)
-- Real-time market quotes and 24h percentage badges for **SPY** (S&P 500), **SMH** (Semiconductors), and **SPMO** (S&P 500 Momentum). *No crypto required.*
-
-### 4. 🚀 SpaceX & NASA Rocket Launch Countdown
-- Live countdown timer (`T-04:12`), mission name (`Falcon 9 | Starlink`), launch provider (`SpaceX`), and launchpad location via free SpaceDevs API.
-
-### 5. 🌙 Graphical Moon Sphere & Solar Data
-- Renders an actual **3D-shaded graphical moon sphere** illustrating the lit crescent/gibbous phase shape alongside Sunrise, Sunset, and Daylight duration.
-
-### 6. 🌤️ Local Weather (Celsius & KM/H)
-- Auto-fetches local weather in **Celsius (`°C`)** and **`KM/H`** wind speed via the free Open-Meteo API.
+- **✈️ Live Flight Radar:** Tracks live overhead aircraft via OpenSky Network API, calculates distance in KM, heading vector, altitude (FT), speed (KTS), airline name, and ICAO route lookups (Origin -> Destination).
+- **🌤️ Local Weather & AQI:** Displays live temperature in Celsius (°C), humidity (%), wind speed (KM/H), weather conditions, and Air Quality Index.
+- **📈 Stock & ETF Badges:** Clean stock percentage badges for `SPY`, `SMH`, and `SPMO` with color-coded 24h change indicators.
+- **🚀 Rocket Launch Countdown:** Tracks upcoming SpaceX / NASA space mission countdowns, launch providers, and pad locations.
+- **⏰ Desk Clock & Thermals:** Shows local 12-hour clock, day/date, and live ESP32-C6 chip temperature (°C) and 30% PWM brightness diagnostic status.
+- **🌙 3D Moon Phase Sphere:** Renders real-time 3D lunar sphere terminator shading (Waxing/Waning Gibbous & Crescent) with Tycho crater details, illumination percentage, sunrise, and sunset times.
+- **⚡ Ultra-Low Power & Fail-Proof:**
+  - **Wi-Fi Modem Light Sleep (`WiFi.setSleep(true)`):** Reduces radio power consumption by ~65%.
+  - **FreeRTOS Non-Blocking Tasking:** Asynchronous background network fetching ensures 0ms instant button screen skipping.
+  - **IRAM_ATTR Hardware Interrupt:** Right BOOT button (GPIO9) triggers instant debounced screen switching.
+  - **40MHz High-Speed SPI:** Fast 110KB double-buffer canvas flushing with smart dirty-flag rendering.
 
 ---
 
-## 🧰 Hardware Pinout
+## 🛠️ Hardware Requirements
 
-| ST7789 Pin | ESP32-C6 GPIO |
-| :--- | :--- |
-| **SCLK** | GPIO 7 |
-| **MOSI** | GPIO 6 |
-| **CS** | GPIO 14 |
-| **DC** | GPIO 15 |
-| **RST** | GPIO 22 |
-| **BL (PWM Dimmed)** | GPIO 23 |
-| **BOOT Button** | GPIO 9 |
+- **Microcontroller:** Waveshare ESP32-C6 LCD 1.47" (RISC-V 160MHz, Wi-Fi 6, BLE 5.3)
+- **Display:** ST7789 IPS LCD (172x320 resolution)
+- **Pin Mapping:**
+  - `TFT_BL` -> GPIO 23 (PWM Backlight Duty 75 / 30% Brightness)
+  - `TFT_SCLK` -> GPIO 7
+  - `TFT_MOSI` -> GPIO 6
+  - `TFT_CS` -> GPIO 14
+  - `TFT_DC` -> GPIO 15
+  - `TFT_RST` -> GPIO 22
+  - `BOOT_BTN` -> GPIO 9 (Right Button)
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Getting Started
 
-1. **Clone the Repository:**
+1. Clone the repository:
    ```bash
    git clone https://github.com/prasadabhishek/esp32-c6-multi-dashboard.git
    cd esp32-c6-multi-dashboard
    ```
-
-2. **Configure Wi-Fi Credentials:**
-   Open `src/main.cpp` and update lines 11–12 with your Wi-Fi SSID & Password:
+2. Open in VS Code with PlatformIO extension or PlatformIO Core CLI.
+3. Update `src/main.cpp` with your Wi-Fi credentials:
    ```cpp
-   const char* WIFI_SSID = "Your_WiFi_SSID";
-   const char* WIFI_PASS = "Your_WiFi_Password";
+   const char* WIFI_SSID = "YOUR_WIFI_SSID";
+   const char* WIFI_PASS = "YOUR_WIFI_PASSWORD";
    ```
-
-3. **Build and Upload:**
+4. Build & Upload to ESP32-C6:
    ```bash
    pio run -t upload
    ```
 
 ---
 
-## 📜 License
+## 📄 License
 
-MIT License. Open source for makers!
+MIT License. Free to use, modify, and build upon.
