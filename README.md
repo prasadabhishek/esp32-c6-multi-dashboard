@@ -2,22 +2,29 @@
 
 An autonomous, multi-dashboard rotating display system for **ESP32-C6** microcontrollers with an **ST7789 IPS LCD** (172x320 resolution). 
 
-Rotates between live **Local Weather**, a **Digital Desk Clock**, **Solar & Lunar Data**, and **Smart Priority Overhead Flight Tracking** (100% free APIs, zero API keys required!).
+Rotates between live **Overhead Flight Tracking**, **Local Weather (Celsius)**, **Digital Desk Clock**, and **Solar & Lunar Data** (100% free APIs, zero API keys required!).
 
-![ESP32-C6 Display Screenshot](esp32_display_screenshot_hd.png)
+---
+
+## 🖼️ Display Gallery & Rotating Screens
+
+| Screen 1: Flight Tracker | Screen 2: Local Weather | Screen 3: Desk Clock | Screen 4: Solar & Lunar |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screen1_flight.png" width="200" /> | <img src="docs/screen2_weather.png" width="200" /> | <img src="docs/screen3_clock.png" width="200" /> | <img src="docs/screen4_solar.png" width="200" /> |
+| Overhead ADS-B Flight Radar | Temperature (°C), Wind, AQI | NTP Time, Date & Wi-Fi | Sunrise, Sunset, Moon Phase |
 
 ---
 
 ## 🌟 Dashboard Modes & Features
 
-### 1. ✈️ Smart Priority Overhead Flight Lock
-- **Auto-Priority:** Whenever an airplane flies overhead (~20 km radius), the screen **locks onto the flight display** showing Callsign, Airline, Route, Altitude, Speed, Distance (km), Compass Heading, and Mini Radar.
+### 1. ✈️ Overhead Flight Tracker
+- **ADS-B Radar:** Detects planes flying overhead within a ~20 km radius. Shows Callsign, Airline, Route (`ATL` ➔ `SMF`), Altitude (ft), Speed (kts), Distance (km), Compass Heading, and Mini Radar.
 - **OpenSky Network Integration:** Polls free ADS-B transponder data every 12 seconds.
 
 ### 2. 🌤️ Local Weather & Air Quality
 - **Free Open-Meteo API:** Auto-fetches live weather data based on IP Geolocation:
-  - Temperature (°F) & WMO Weather Condition
-  - Humidity % & Wind Speed (mph)
+  - Temperature in Celsius (`°C`) & WMO Weather Condition
+  - Humidity % & Wind Speed (`KM/H`)
   - Air Quality Index (AQI Badge)
 
 ### 3. ⏰ Digital Desk Clock & Date
@@ -28,7 +35,7 @@ Rotates between live **Local Weather**, a **Digital Desk Clock**, **Solar & Luna
 
 ### 4. 🌅 Solar & Lunar Tracker
 - **Seattle / Local Geolocation Data:**
-  - Sunrise & Sunset Times
+  - Sunrise & Sunset Times (`5:48 AM / 8:52 PM`)
   - Daylight Duration Progress
   - Moon Phase & Illumination % (`Waxing Gibbous 88%`)
 
