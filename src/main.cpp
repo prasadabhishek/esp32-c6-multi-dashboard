@@ -46,7 +46,7 @@ enum DisplayScreen {
 };
 DisplayScreen current_screen = SCREEN_WEATHER;
 uint32_t last_screen_switch = 0;
-const uint32_t ROTATION_INTERVAL_MS = 6000; // Rotate every 6 seconds unconditionally
+const uint32_t ROTATION_INTERVAL_MS = 6000; // Rotate every 6 seconds
 
 // Flight Data Structure
 struct FlightInfo {
@@ -69,10 +69,10 @@ struct FlightInfo {
 // Weather Data Structure (via Open-Meteo Free API)
 struct WeatherInfo {
   bool valid;
-  float temp_f;
+  float temp_c;
   int humidity;
   int weather_code;
-  float wind_mph;
+  float wind_kmh;
   String condition_str;
   uint32_t last_update;
 } current_weather;
@@ -175,12 +175,13 @@ void updateLocation() {
   }
 }
 
+// Fetch Weather Data in Celsius & km/h via Open-Meteo Free API
 void fetchWeatherData() {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
   String url = "https://api.open-meteo.com/v1/forecast?latitude=" + String(current_lat, 4) +
                "&longitude=" + String(current_lon, 4) +
-               "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph";
+               "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&temperature_unit=celsius&wind_speed_unit=kmh";
   http.begin(url);
   http.setTimeout(4000);
   int httpCode = http.GET();
@@ -189,15 +190,15 @@ void fetchWeatherData() {
     JsonDocument doc;
     if (!deserializeJson(doc, payload) && doc["current"].is<JsonObject>()) {
       JsonObject cur = doc["current"].as<JsonObject>();
-      current_weather.temp_f = cur["temperature_2m"].as<float>();
+      current_weather.temp_c = cur["temperature_2m"].as<float>();
       current_weather.humidity = cur["relative_humidity_2m"].as<int>();
       current_weather.weather_code = cur["weather_code"].as<int>();
-      current_weather.wind_mph = cur["wind_speed_10m"].as<float>();
+      current_weather.wind_kmh = cur["wind_speed_10m"].as<float>();
       current_weather.condition_str = getWeatherConditionStr(current_weather.weather_code);
       current_weather.valid = true;
       current_weather.last_update = millis();
-      Serial.printf("Weather Success: %.1f F, %s, Wind: %.1f mph\n", 
-                    current_weather.temp_f, current_weather.condition_str.c_str(), current_weather.wind_mph);
+      Serial.printf("Weather Success: %.1f C, %s, Wind: %.1f km/h\n", 
+                    current_weather.temp_c, current_weather.condition_str.c_str(), current_weather.wind_kmh);
     }
   }
   http.end();
@@ -406,7 +407,7 @@ void renderFlightScreen() {
   canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name);
 }
 
-// 2. LOCAL WEATHER SCREEN
+// 2. LOCAL WEATHER SCREEN (CELSIUS)
 void renderWeatherScreen() {
   canvas->fillScreen(0x0821);
   uint16_t c_cyan = 0x07FF, c_amber = 0xFBE0, c_green = 0x07E0, c_white = 0xFFFF, c_gray = 0x7BEF, c_dark = 0x18E3;
@@ -418,14 +419,15 @@ void renderWeatherScreen() {
   canvas->setTextColor(c_white); canvas->setTextSize(1); canvas->setCursor(24, 11); canvas->print("LOCAL WEATHER");
   canvas->setTextColor(c_gray); canvas->setCursor(120, 11); canvas->print("[2/4]");
 
+  // Temperature Banner in Celsius (°C)
   canvas->drawRoundRect(6, 38, SCREEN_W - 12, 70, 6, c_amber);
   canvas->fillRoundRect(7, 39, SCREEN_W - 14, 68, 6, 0x2120);
 
   canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 46); canvas->print("TEMPERATURE");
   canvas->setTextColor(c_white); canvas->setTextSize(4); canvas->setCursor(14, 62);
   if (current_weather.valid) {
-    canvas->printf("%.0f*", current_weather.temp_f);
-    canvas->setTextSize(2); canvas->setTextColor(c_amber); canvas->print("F");
+    canvas->printf("%.1f*", current_weather.temp_c);
+    canvas->setTextSize(2); canvas->setTextColor(c_amber); canvas->print("C");
   } else {
     canvas->print("--*");
   }
@@ -444,8 +446,8 @@ void renderWeatherScreen() {
   canvas->drawRoundRect(90, 168, 76, 56, 4, c_dark);
   canvas->fillRoundRect(91, 169, 74, 54, 4, 0x0963);
   canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(96, 174); canvas->print("WIND");
-  canvas->setTextColor(c_white); canvas->setTextSize(2); canvas->setCursor(96, 192); canvas->printf("%.0f", current_weather.wind_mph);
-  canvas->setTextSize(1); canvas->setTextColor(c_cyan); canvas->setCursor(132, 200); canvas->print("MPH");
+  canvas->setTextColor(c_white); canvas->setTextSize(2); canvas->setCursor(96, 192); canvas->printf("%.0f", current_weather.wind_kmh);
+  canvas->setTextSize(1); canvas->setTextColor(c_cyan); canvas->setCursor(132, 200); canvas->print("KM/H");
 
   canvas->drawRoundRect(6, 232, SCREEN_W - 12, 58, 4, c_dark);
   canvas->fillRoundRect(7, 233, SCREEN_W - 14, 56, 4, 0x10A2);
@@ -517,7 +519,7 @@ void renderClockScreen() {
   canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name);
 }
 
-// 4. SUNRISE, SUNSET & MOON PHASE SCREEN
+// 4. SUNRISE, SUNSET & MOON PHASE SCREEN (FIXED MOON PHASE FONT SIZE SO IT FITS 100%)
 void renderSunMoonScreen() {
   canvas->fillScreen(0x0821);
   uint16_t c_cyan = 0x07FF, c_amber = 0xFBE0, c_green = 0x07E0, c_white = 0xFFFF, c_gray = 0x7BEF, c_dark = 0x18E3, c_pink = 0xF810;
@@ -544,11 +546,14 @@ void renderSunMoonScreen() {
   canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 168); canvas->print("DAYLIGHT DURATION");
   canvas->setTextColor(c_cyan); canvas->setTextSize(1); canvas->setCursor(14, 184); canvas->print("15 HRS 04 MINS");
 
+  // Moon Phase Card (Size 1 font for title & value so long phase names like WAXING GIBBOUS fit 100% cleanly!)
   canvas->drawRoundRect(6, 214, SCREEN_W - 12, 70, 4, c_dark);
   canvas->fillRoundRect(7, 215, SCREEN_W - 14, 68, 4, 0x10A2);
-  canvas->setTextColor(c_green); canvas->setTextSize(1); canvas->setCursor(14, 222); canvas->print("MOON PHASE");
-  canvas->setTextColor(c_white); canvas->setTextSize(2); canvas->setCursor(14, 240); canvas->print("WAXING GIBBOUS");
-  canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 262); canvas->print("ILLUMINATION: 88%");
+  canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 222); canvas->print("MOON PHASE");
+  canvas->setTextColor(c_green); canvas->setTextSize(2); canvas->setCursor(14, 238); canvas->print("WAXING");
+  canvas->setCursor(14, 258); canvas->print("GIBBOUS");
+  canvas->setTextColor(c_white); canvas->setTextSize(1); canvas->setCursor(104, 244); canvas->print("ILLUM:");
+  canvas->setCursor(104, 258); canvas->print("88%");
 
   canvas->drawFastHLine(0, 296, SCREEN_W, c_dark);
   canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(10, 304); canvas->print("LOC:");
@@ -582,18 +587,6 @@ void setup() {
   display->fillScreen(0x0000);
   canvas->begin();
 
-  canvas->fillScreen(0x0821);
-  canvas->setTextColor(0x07FF);
-  canvas->setTextSize(2);
-  canvas->setCursor(15, 80);
-  canvas->println("MULTI-DASH");
-  canvas->println("  SYSTEM");
-  canvas->setTextSize(1);
-  canvas->setTextColor(0xFFFF);
-  canvas->setCursor(15, 140);
-  canvas->println("Connecting Wi-Fi...");
-  canvas->flush();
-
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   int retries = 0;
@@ -603,8 +596,7 @@ void setup() {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("Wi-Fi Connected! IP: " + WiFi.localIP().toString());
-    configTime(-7 * 3600, 0, "pool.ntp.org", "time.nist.gov"); // Seattle PST/PDT offset
+    configTime(-7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
     updateLocation();
     fetchWeatherData();
   }
@@ -622,19 +614,16 @@ void loop() {
     WiFi.reconnect();
   }
 
-  // Poll OpenSky every 12s
   if (millis() - last_flight_fetch >= 12000) {
     last_flight_fetch = millis();
     fetchOverheadFlights();
   }
 
-  // Poll Open-Meteo Weather every 10 mins (600,000 ms)
   if (millis() - last_weather_fetch >= 600000 || !current_weather.valid) {
     last_weather_fetch = millis();
     fetchWeatherData();
   }
 
-  // UNCONDITIONAL ROTATION: Rotate screen every 6 seconds between ALL 4 screens [1/4] -> [2/4] -> [3/4] -> [4/4]
   if (millis() - last_screen_switch >= ROTATION_INTERVAL_MS) {
     last_screen_switch = millis();
     current_screen = (DisplayScreen)((current_screen + 1) % NUM_SCREENS);
