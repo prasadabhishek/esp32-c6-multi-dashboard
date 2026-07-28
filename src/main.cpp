@@ -25,7 +25,7 @@ bool location_found = false;
 #define TFT_CS   14
 #define TFT_DC   15
 #define TFT_RST  22
-#define BOOT_BTN 9   // ESP32-C6 Onboard BOOT Button
+#define BOOT_BTN 9   // ESP32-C6 Right BOOT Button (GPIO9)
 
 #define SCREEN_W 172
 #define SCREEN_H 320
@@ -477,7 +477,7 @@ void renderWeatherScreen() {
   canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name);
 }
 
-// 3. STOCKS & ETFS (SPY, SMH, SPMO - CLEAN WHITE TICKER SYMBOLS!)
+// 3. STOCKS & ETFS (SPY, SMH, SPMO)
 void renderStocksScreen() {
   canvas->fillScreen(0x0821);
   uint16_t c_cyan = 0x07FF, c_amber = 0xFBE0, c_green = 0x07E0, c_white = 0xFFFF, c_gray = 0x7BEF, c_dark = 0x18E3, c_red = 0xF800;
@@ -485,16 +485,13 @@ void renderStocksScreen() {
   canvas->setTextColor(c_white); canvas->setTextSize(1); canvas->setCursor(24, 11); canvas->print("STOCKS & ETFS");
   canvas->setTextColor(c_gray); canvas->setCursor(120, 11); canvas->print("[3/6]");
 
-  // Clean White Ticker Names with Colored Percentage Badges!
   auto drawCleanStockCard = [&](int y, StockQuote sq) {
     canvas->drawRoundRect(6, y, SCREEN_W - 12, 68, 6, c_dark);
     canvas->fillRoundRect(7, y + 1, SCREEN_W - 14, 66, 6, 0x0963);
 
-    // Crisp White Ticker Symbol
     canvas->setTextColor(c_white); canvas->setTextSize(3); canvas->setCursor(16, y + 22);
     canvas->print(sq.symbol);
 
-    // Colored Percentage Badge on Right
     uint16_t badgeBg = sq.change_pct >= 0 ? c_green : c_red;
     canvas->fillRoundRect(88, y + 18, 70, 32, 4, badgeBg);
     canvas->setTextColor(0x0000); canvas->setTextSize(2); canvas->setCursor(92, y + 26);
@@ -567,7 +564,7 @@ void renderClockScreen() {
   canvas->setTextColor(c_cyan); canvas->setTextSize(1); canvas->setCursor(14, 194); canvas->print("ESP32-C6 THERMALS");
   float chipTemp = temperatureRead();
   canvas->setTextColor(chipTemp > 55.0f ? 0xF800 : c_green); canvas->setTextSize(2); canvas->setCursor(14, 212); canvas->printf("%.1f *C", chipTemp);
-  canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 238); canvas->print("BACKLIGHT: "); canvas->setTextColor(c_white); canvas->print("65%");
+  canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 238); canvas->print("BACKLIGHT: "); canvas->setTextColor(c_white); canvas->print("50%");
   canvas->setTextColor(c_gray); canvas->setCursor(14, 254); canvas->print("POWER: "); canvas->setTextColor(c_green); canvas->print("COOL & LOW POWER");
 
   canvas->drawFastHLine(0, 296, SCREEN_W, c_dark); canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(10, 304); canvas->print("LOC:");
@@ -625,8 +622,9 @@ void setup() {
 
   pinMode(BOOT_BTN, INPUT_PULLUP);
 
+  // 50% PWM Backlight Dimming (LEDC duty 128/255 = 50% brightness)
   ledcAttach(TFT_BL, 5000, 8);
-  ledcWrite(TFT_BL, 165);
+  ledcWrite(TFT_BL, 128);
 
   display->begin(); display->fillScreen(0x0000); canvas->begin();
 
@@ -652,16 +650,16 @@ void loop() {
 
   if (WiFi.status() != WL_CONNECTED) { WiFi.disconnect(); WiFi.reconnect(); }
 
-  static bool last_btn_state = HIGH;
-  bool btn_state = digitalRead(BOOT_BTN);
-  if (last_btn_state == HIGH && btn_state == LOW) {
-    last_screen_switch = millis();
+  // Clean debounced Right BOOT Button (GPIO9) handler (350ms lockout, no resets!)
+  static uint32_t last_btn_press = 0;
+  uint32_t now = millis();
+  if (digitalRead(BOOT_BTN) == LOW && (now - last_btn_press > 350)) {
+    last_btn_press = now;
+    last_screen_switch = now;
     current_screen = (DisplayScreen)((current_screen + 1) % NUM_SCREENS);
-    Serial.printf("BOOT Button Pressed! Skipping to Screen: %d\n", (int)current_screen);
+    Serial.printf("Right BOOT Button Pressed! Skipped to Screen: %d\n", (int)current_screen);
     renderDisplay();
-    delay(250);
   }
-  last_btn_state = btn_state;
 
   if (millis() - last_flight_fetch >= 12000) { last_flight_fetch = millis(); fetchOverheadFlights(); }
   if (millis() - last_weather_fetch >= 600000 || !current_weather.valid) { last_weather_fetch = millis(); fetchWeatherData(); }
