@@ -80,7 +80,7 @@ struct WeatherInfo {
   uint32_t last_update;
 } current_weather;
 
-// Stock Data Structure (SPY, SMH, SPMO - Percentage Badges Only!)
+// Stock Data Structure (SPY, SMH, SPMO)
 struct StockQuote {
   String symbol;
   float change_pct;
@@ -217,7 +217,7 @@ void fetchWeatherData() {
   http.end();
 }
 
-// Fetch SPY, SMH, SPMO Stock Quotes (Percentage Badges Only)
+// Fetch SPY, SMH, SPMO Stock Quotes
 void fetchStockData() {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
@@ -378,7 +378,7 @@ void drawMoonSphere(int cx, int cy, int radius, float phaseFraction) {
 }
 
 // -------------------------------------------------------------
-// PERFECTED UN-CLUTTERED RENDERERS FOR ALL 6 DASHBOARD SCREENS
+// RENDERERS FOR ALL 6 DASHBOARD SCREENS
 // -------------------------------------------------------------
 
 // 1. FLIGHT TRACKER
@@ -477,7 +477,7 @@ void renderWeatherScreen() {
   canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name);
 }
 
-// 3. STOCKS & ETFS (SPY, SMH, SPMO - PERCENTAGE BADGES ONLY! NO NUMERIC PRICES)
+// 3. STOCKS & ETFS (SPY, SMH, SPMO - CLEAN WHITE TICKER SYMBOLS!)
 void renderStocksScreen() {
   canvas->fillScreen(0x0821);
   uint16_t c_cyan = 0x07FF, c_amber = 0xFBE0, c_green = 0x07E0, c_white = 0xFFFF, c_gray = 0x7BEF, c_dark = 0x18E3, c_red = 0xF800;
@@ -485,25 +485,25 @@ void renderStocksScreen() {
   canvas->setTextColor(c_white); canvas->setTextSize(1); canvas->setCursor(24, 11); canvas->print("STOCKS & ETFS");
   canvas->setTextColor(c_gray); canvas->setCursor(120, 11); canvas->print("[3/6]");
 
-  // Perfected Uncrowded Stock Card Renderer (Shows ONLY Symbol & Green/Red Pct Badge!)
-  auto drawCleanStockCard = [&](int y, StockQuote sq, uint16_t accentColor) {
+  // Clean White Ticker Names with Colored Percentage Badges!
+  auto drawCleanStockCard = [&](int y, StockQuote sq) {
     canvas->drawRoundRect(6, y, SCREEN_W - 12, 68, 6, c_dark);
     canvas->fillRoundRect(7, y + 1, SCREEN_W - 14, 66, 6, 0x0963);
 
-    // Large Bold Symbol on Left
-    canvas->setTextColor(accentColor); canvas->setTextSize(3); canvas->setCursor(16, y + 22);
+    // Crisp White Ticker Symbol
+    canvas->setTextColor(c_white); canvas->setTextSize(3); canvas->setCursor(16, y + 22);
     canvas->print(sq.symbol);
 
-    // Clean Colored Percentage Badge on Right
+    // Colored Percentage Badge on Right
     uint16_t badgeBg = sq.change_pct >= 0 ? c_green : c_red;
     canvas->fillRoundRect(88, y + 18, 70, 32, 4, badgeBg);
     canvas->setTextColor(0x0000); canvas->setTextSize(2); canvas->setCursor(92, y + 26);
     canvas->printf("%s%.1f%%", sq.change_pct >= 0 ? "+" : "", sq.change_pct);
   };
 
-  drawCleanStockCard(38,  current_stocks.spy,  c_cyan);
-  drawCleanStockCard(114, current_stocks.smh,  c_amber);
-  drawCleanStockCard(190, current_stocks.spmo, c_green);
+  drawCleanStockCard(38,  current_stocks.spy);
+  drawCleanStockCard(114, current_stocks.smh);
+  drawCleanStockCard(190, current_stocks.spmo);
 
   canvas->drawFastHLine(0, 296, SCREEN_W, c_dark); canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(10, 304); canvas->print("MARKET:");
   canvas->setTextColor(c_cyan); canvas->setCursor(54, 304); canvas->print("24H % CHANGE");
@@ -517,19 +517,16 @@ void renderRocketScreen() {
   canvas->setTextColor(c_white); canvas->setTextSize(1); canvas->setCursor(24, 11); canvas->print("ROCKET LAUNCH");
   canvas->setTextColor(c_gray); canvas->setCursor(120, 11); canvas->print("[4/6]");
 
-  // Mission Card
   canvas->drawRoundRect(6, 36, SCREEN_W - 12, 58, 4, c_pink); canvas->fillRoundRect(7, 37, SCREEN_W - 14, 56, 4, 0x2120);
   canvas->setTextColor(c_pink); canvas->setTextSize(1); canvas->setCursor(14, 42); canvas->print("MISSION");
   canvas->setTextColor(c_white); canvas->setTextSize(2); canvas->setCursor(14, 56); canvas->print("FALCON 9");
   canvas->setTextSize(1); canvas->setTextColor(c_gray); canvas->setCursor(104, 62); canvas->print("STARLINK");
 
-  // Countdown Card
   canvas->drawRoundRect(6, 100, SCREEN_W - 12, 84, 6, c_amber); canvas->fillRoundRect(7, 101, SCREEN_W - 14, 82, 6, 0x1084);
   canvas->setTextColor(c_amber); canvas->setTextSize(1); canvas->setCursor(14, 108); canvas->print("COUNTDOWN");
   canvas->setTextColor(c_white); canvas->setTextSize(3); canvas->setCursor(14, 126); canvas->print("T-04:12");
   canvas->setTextSize(1); canvas->setTextColor(c_green); canvas->setCursor(14, 160); canvas->print("STATUS: GO FOR LAUNCH");
 
-  // Provider & Location Card
   canvas->drawRoundRect(6, 190, SCREEN_W - 12, 98, 4, c_dark); canvas->fillRoundRect(7, 191, SCREEN_W - 14, 96, 4, 0x0963);
   canvas->setTextColor(c_cyan); canvas->setTextSize(1); canvas->setCursor(14, 198); canvas->print("LAUNCH PROVIDER");
   canvas->setTextColor(c_white); canvas->setTextSize(2); canvas->setCursor(14, 214); canvas->print("SPACEX");
@@ -566,7 +563,6 @@ void renderClockScreen() {
   if (time_valid) { char dateBuf[32]; strftime(dateBuf, sizeof(dateBuf), "%a, %b %d", &timeinfo); canvas->print(dateBuf); }
   else { canvas->print("MON, JUL 28"); }
 
-  // Thermal & Power Card
   canvas->drawRoundRect(6, 186, SCREEN_W - 12, 102, 4, c_dark); canvas->fillRoundRect(7, 187, SCREEN_W - 14, 100, 4, 0x0963);
   canvas->setTextColor(c_cyan); canvas->setTextSize(1); canvas->setCursor(14, 194); canvas->print("ESP32-C6 THERMALS");
   float chipTemp = temperatureRead();
@@ -594,12 +590,10 @@ void renderSunMoonScreen() {
   canvas->setTextColor(c_pink); canvas->setTextSize(1); canvas->setCursor(14, 98); canvas->print("SUNSET");
   canvas->setTextColor(c_white); canvas->setTextSize(2); canvas->setCursor(14, 112); canvas->print("8:52 PM");
 
-  // Graphical Moon Sphere Card
   canvas->drawRoundRect(6, 148, SCREEN_W - 12, 140, 6, c_dark); canvas->fillRoundRect(7, 149, SCREEN_W - 14, 138, 6, 0x0963);
   canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 156); canvas->print("MOON PHASE");
 
-  // Render Real Graphical 3D-styled Moon Sphere!
-  drawMoonSphere(44, 218, 26, 0.65f /* Waxing Gibbous fraction */);
+  drawMoonSphere(44, 218, 26, 0.65f);
 
   canvas->setTextColor(c_green); canvas->setTextSize(1); canvas->setCursor(84, 184); canvas->print("WAXING");
   canvas->setCursor(84, 198); canvas->print("GIBBOUS");
@@ -631,7 +625,6 @@ void setup() {
 
   pinMode(BOOT_BTN, INPUT_PULLUP);
 
-  // Thermal & Power Optimization: PWM Backlight Dimming (65% brightness reduces board heat by ~35%!)
   ledcAttach(TFT_BL, 5000, 8);
   ledcWrite(TFT_BL, 165);
 
@@ -659,7 +652,6 @@ void loop() {
 
   if (WiFi.status() != WL_CONNECTED) { WiFi.disconnect(); WiFi.reconnect(); }
 
-  // Check BOOT Button (GPIO9)
   static bool last_btn_state = HIGH;
   bool btn_state = digitalRead(BOOT_BTN);
   if (last_btn_state == HIGH && btn_state == LOW) {
@@ -675,7 +667,6 @@ void loop() {
   if (millis() - last_weather_fetch >= 600000 || !current_weather.valid) { last_weather_fetch = millis(); fetchWeatherData(); }
   if (millis() - last_stock_fetch >= 300000 || !current_stocks.valid) { last_stock_fetch = millis(); fetchStockData(); }
 
-  // 6-second rotation
   if (millis() - last_screen_switch >= ROTATION_INTERVAL_MS) {
     last_screen_switch = millis();
     current_screen = (DisplayScreen)((current_screen + 1) % NUM_SCREENS);
