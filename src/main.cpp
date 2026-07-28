@@ -30,8 +30,8 @@ bool location_found = false;
 #define SCREEN_W 172
 #define SCREEN_H 320
 
-// Display Driver (ST7789 172x320 requires col_offset1=34 and col_offset2=34)
-Arduino_DataBus *bus = new Arduino_ESP32SPI(TFT_DC, TFT_CS, TFT_SCLK, TFT_MOSI, GFX_NOT_DEFINED);
+// High-Speed 40MHz SPI Bus Driver for ST7789 (col_offset1=34, col_offset2=34)
+Arduino_DataBus *bus = new Arduino_ESP32SPI(TFT_DC, TFT_CS, TFT_SCLK, TFT_MOSI, GFX_NOT_DEFINED, FSPI, 40000000UL);
 Arduino_GFX *display = new Arduino_ST7789(bus, TFT_RST, 0 /* rotation */, true /* IPS */, SCREEN_W, SCREEN_H, 34, 0, 34, 0);
 
 // Double Buffer Canvas in RAM (172x320 x 16-bit = 110KB)
@@ -56,6 +56,9 @@ volatile bool g_btn_interrupt_flag = false;
 void IRAM_ATTR handleBootButtonISR() {
   g_btn_interrupt_flag = true;
 }
+
+// Dirty Flag for Power-Efficient Smart Rendering
+bool g_display_dirty = true;
 
 // Flight Data Structure
 struct FlightInfo {
@@ -190,6 +193,7 @@ void updateLocation() {
       city.toUpperCase(); region.toUpperCase();
       current_location_name = city + ", " + region;
       location_found = true;
+      g_display_dirty = true;
     }
   }
   http.end();
@@ -218,6 +222,7 @@ void fetchWeatherData() {
       current_weather.condition_str = getWeatherConditionStr(current_weather.weather_code);
       current_weather.valid = true;
       current_weather.last_update = millis();
+      g_display_dirty = true;
     }
   }
   http.end();
@@ -243,6 +248,7 @@ void fetchStockData() {
       }
       current_stocks.valid = true;
       current_stocks.last_update = millis();
+      g_display_dirty = true;
     }
   }
   http.end();
@@ -252,6 +258,7 @@ void fetchStockData() {
     current_stocks.smh  = {"SMH",   1.82f};
     current_stocks.spmo = {"SPMO", -0.15f};
     current_stocks.valid = true;
+    g_display_dirty = true;
   }
 }
 
@@ -270,6 +277,7 @@ void fetchRocketData() {
       current_rocket.location = l["pad"]["location"]["name"].as<String>();
       current_rocket.valid = true;
       current_rocket.last_update = millis();
+      g_display_dirty = true;
     }
   }
   http.end();
@@ -279,6 +287,7 @@ void fetchRocketData() {
     current_rocket.provider = "SPACEX";
     current_rocket.location = "CAPE CANAVERAL, FL";
     current_rocket.valid = true;
+    g_display_dirty = true;
   }
 }
 
@@ -345,26 +354,32 @@ void fetchOverheadFlights() {
         current_flight.distance_km = closest_dist;
         current_flight.last_update = millis();
         updateRouteInfo(current_flight);
+        g_display_dirty = true;
         http.end(); return;
       }
     }
   }
-  http.end(); current_flight.active = false;
+  http.end(); current_flight.active = false; g_display_dirty = true;
 }
 
-// Non-blocking FreeRTOS Background Network Task
+// Fail-Safe Exponential Backoff Non-blocking FreeRTOS Background Network Task
 void networkWorkerTask(void *pvParameters) {
   uint32_t last_flight = 0, last_weather = 0, last_stock = 0, last_rocket = 0;
+  uint32_t wifi_reconnect_backoff = 1000;
 
   for (;;) {
     if (WiFi.status() == WL_CONNECTED) {
+      wifi_reconnect_backoff = 1000; // Reset backoff on connection success
       uint32_t now = millis();
       if (now - last_flight >= 15000)   { last_flight = now; fetchOverheadFlights(); }
       if (now - last_weather >= 600000 || !current_weather.valid) { last_weather = now; fetchWeatherData(); }
       if (now - last_stock >= 300000   || !current_stocks.valid)  { last_stock = now; fetchStockData(); }
       if (now - last_rocket >= 3600000  || !current_rocket.valid)  { last_rocket = now; fetchRocketData(); }
     } else {
+      Serial.printf("Wi-Fi Disconnected. Retrying in %d ms...\n", wifi_reconnect_backoff);
       WiFi.disconnect(); WiFi.reconnect();
+      vTaskDelay(pdMS_TO_TICKS(wifi_reconnect_backoff));
+      if (wifi_reconnect_backoff < 30000) wifi_reconnect_backoff *= 2; // Exponential backoff max 30s
     }
     vTaskDelay(pdMS_TO_TICKS(1500));
   }
@@ -644,7 +659,7 @@ void renderDisplay() {
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(300);
 
   // Attach Hardware Interrupt for BOOT Button (GPIO9)
   pinMode(BOOT_BTN, INPUT_PULLUP);
@@ -656,8 +671,12 @@ void setup() {
 
   display->begin(); display->fillScreen(0x0000); canvas->begin();
 
-  WiFi.mode(WIFI_STA); WiFi.begin(WIFI_SSID, WIFI_PASS);
-  int retries = 0; while (WiFi.status() != WL_CONNECTED && retries < 25) { delay(500); retries++; }
+  // Enable Wi-Fi Modem Light Sleep for Low Power & Cool Silicon Operation
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(true);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+
+  int retries = 0; while (WiFi.status() != WL_CONNECTED && retries < 20) { delay(400); retries++; }
 
   if (WiFi.status() == WL_CONNECTED) {
     configTime(-7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
@@ -681,7 +700,7 @@ void loop() {
       last_screen_switch = now;
       current_screen = (DisplayScreen)((current_screen + 1) % NUM_SCREENS);
       Serial.printf("Instant BOOT Button Triggered! Skipped to Screen: %d\n", (int)current_screen);
-      renderDisplay();
+      g_display_dirty = true;
     }
   }
 
@@ -689,8 +708,16 @@ void loop() {
   if (millis() - last_screen_switch >= ROTATION_INTERVAL_MS) {
     last_screen_switch = millis();
     current_screen = (DisplayScreen)((current_screen + 1) % NUM_SCREENS);
+    g_display_dirty = true;
   }
 
-  renderDisplay();
-  vTaskDelay(pdMS_TO_TICKS(120)); // Yield CPU to lower power & temperature
+  // 3. Smart Rendering: Render only when screen state or dynamic element changes!
+  if (g_display_dirty || current_screen == SCREEN_FLIGHT || current_screen == SCREEN_CLOCK) {
+    if (current_screen != SCREEN_FLIGHT && current_screen != SCREEN_CLOCK) {
+      g_display_dirty = false;
+    }
+    renderDisplay();
+  }
+
+  vTaskDelay(pdMS_TO_TICKS(150)); // Yield CPU to lower power & temperature
 }
