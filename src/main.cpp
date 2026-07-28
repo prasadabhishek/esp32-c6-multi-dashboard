@@ -51,6 +51,12 @@ DisplayScreen current_screen = SCREEN_WEATHER;
 uint32_t last_screen_switch = 0;
 const uint32_t ROTATION_INTERVAL_MS = 6000;
 
+// Interrupt Flag for BOOT Button
+volatile bool g_btn_interrupt_flag = false;
+void IRAM_ATTR handleBootButtonISR() {
+  g_btn_interrupt_flag = true;
+}
+
 // Flight Data Structure
 struct FlightInfo {
   bool active;
@@ -620,7 +626,9 @@ void setup() {
   Serial.begin(115200);
   delay(500);
 
+  // Attach Hardware Interrupt for BOOT Button (GPIO9)
   pinMode(BOOT_BTN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(BOOT_BTN), handleBootButtonISR, FALLING);
 
   // 50% PWM Backlight Dimming (LEDC duty 128/255 = 50% brightness)
   ledcAttach(TFT_BL, 5000, 8);
@@ -650,15 +658,18 @@ void loop() {
 
   if (WiFi.status() != WL_CONNECTED) { WiFi.disconnect(); WiFi.reconnect(); }
 
-  // Clean debounced Right BOOT Button (GPIO9) handler (350ms lockout, no resets!)
-  static uint32_t last_btn_press = 0;
-  uint32_t now = millis();
-  if (digitalRead(BOOT_BTN) == LOW && (now - last_btn_press > 350)) {
-    last_btn_press = now;
-    last_screen_switch = now;
-    current_screen = (DisplayScreen)((current_screen + 1) % NUM_SCREENS);
-    Serial.printf("Right BOOT Button Pressed! Skipped to Screen: %d\n", (int)current_screen);
-    renderDisplay();
+  // Hardware Interrupt Handler for Right BOOT Button (GPIO9)
+  if (g_btn_interrupt_flag) {
+    g_btn_interrupt_flag = false;
+    static uint32_t last_btn_press = 0;
+    uint32_t now = millis();
+    if (now - last_btn_press > 300) {
+      last_btn_press = now;
+      last_screen_switch = now;
+      current_screen = (DisplayScreen)((current_screen + 1) % NUM_SCREENS);
+      Serial.printf("ISR BOOT Button Triggered! Skipped to Screen: %d\n", (int)current_screen);
+      renderDisplay();
+    }
   }
 
   if (millis() - last_flight_fetch >= 12000) { last_flight_fetch = millis(); fetchOverheadFlights(); }
