@@ -8,14 +8,14 @@
 
 #include "airports_db.h"
 
-// Wi-Fi Credentials
+// Wi-Fi Credentials (Placeholders for public repository)
 const char* WIFI_SSID = "YOUR_WIFI_SSID";
 const char* WIFI_PASS = "YOUR_WIFI_PASSWORD";
 
-// Default Fallback Location: Belltown, Seattle, WA
-double current_lat = 47.6148;
-double current_lon = -122.3458;
-String current_location_name = "BELLTOWN, SEATTLE";
+// Dynamic IP-Geolocation (Auto-detects location via IP-API at runtime)
+double current_lat = 0.0;
+double current_lon = 0.0;
+String current_location_name = "LOCATING...";
 bool location_found = false;
 
 // Display Pin Definitions for Waveshare ESP32-C6 LCD 1.47"
@@ -186,10 +186,10 @@ void updateLocation() {
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, payload);
     if (!err) {
-      current_lat = doc["lat"] | 47.6148;
-      current_lon = doc["lon"] | -122.3458;
-      String city = doc["city"] | "Seattle";
-      String region = doc["region"] | "WA";
+      current_lat = doc["lat"] | 0.0;
+      current_lon = doc["lon"] | 0.0;
+      String city = doc["city"] | "CITY";
+      String region = doc["region"] | "REGION";
       city.toUpperCase(); region.toUpperCase();
       current_location_name = city + ", " + region;
       location_found = true;
@@ -198,14 +198,13 @@ void updateLocation() {
   }
   http.end();
   if (!location_found) {
-    current_lat = 47.6148; current_lon = -122.3458;
-    current_location_name = "BELLTOWN, SEATTLE";
+    current_location_name = "LOCATION AUTO-IP";
   }
 }
 
 // Fetch Weather Data (Celsius & km/h)
 void fetchWeatherData() {
-  if (WiFi.status() != WL_CONNECTED) return;
+  if (WiFi.status() != WL_CONNECTED || !location_found) return;
   HTTPClient http;
   String url = "https://api.open-meteo.com/v1/forecast?latitude=" + String(current_lat, 4) +
                "&longitude=" + String(current_lon, 4) +
@@ -319,7 +318,7 @@ void updateRouteInfo(FlightInfo& flight) {
 
 // Query Overhead Flights via OpenSky API
 void fetchOverheadFlights() {
-  if (WiFi.status() != WL_CONNECTED) return;
+  if (WiFi.status() != WL_CONNECTED || !location_found) return;
   double delta_lat = 0.20, delta_lon = 0.25;
   String url = "https://opensky-network.org/api/states/all?lamin=" + String(current_lat - delta_lat, 4) +
                "&lamax=" + String(current_lat + delta_lat, 4) +
@@ -369,17 +368,18 @@ void networkWorkerTask(void *pvParameters) {
 
   for (;;) {
     if (WiFi.status() == WL_CONNECTED) {
-      wifi_reconnect_backoff = 1000; // Reset backoff on connection success
+      wifi_reconnect_backoff = 1000;
+      if (!location_found) updateLocation();
+
       uint32_t now = millis();
       if (now - last_flight >= 15000)   { last_flight = now; fetchOverheadFlights(); }
       if (now - last_weather >= 600000 || !current_weather.valid) { last_weather = now; fetchWeatherData(); }
       if (now - last_stock >= 300000   || !current_stocks.valid)  { last_stock = now; fetchStockData(); }
       if (now - last_rocket >= 3600000  || !current_rocket.valid)  { last_rocket = now; fetchRocketData(); }
     } else {
-      Serial.printf("Wi-Fi Disconnected. Retrying in %d ms...\n", wifi_reconnect_backoff);
       WiFi.disconnect(); WiFi.reconnect();
       vTaskDelay(pdMS_TO_TICKS(wifi_reconnect_backoff));
-      if (wifi_reconnect_backoff < 30000) wifi_reconnect_backoff *= 2; // Exponential backoff max 30s
+      if (wifi_reconnect_backoff < 30000) wifi_reconnect_backoff *= 2;
     }
     vTaskDelay(pdMS_TO_TICKS(1500));
   }
@@ -478,7 +478,7 @@ void renderFlightScreen() {
     canvas->setTextColor(c_amber); canvas->setTextSize(1); canvas->setCursor(56, 274); canvas->printf("HDG: %d* DIR", current_flight.heading_deg);
   }
   canvas->drawFastHLine(0, 296, SCREEN_W, c_dark); canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(10, 304); canvas->print("LOC:");
-  canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name);
+  canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name.substring(0, 18));
 }
 
 // 2. WEATHER SCREEN (CELSIUS)
@@ -513,7 +513,7 @@ void renderWeatherScreen() {
   canvas->setTextColor(c_white); canvas->setTextSize(2); canvas->setCursor(14, 256); canvas->print("AQI 28 (GOOD)");
 
   canvas->drawFastHLine(0, 296, SCREEN_W, c_dark); canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(10, 304); canvas->print("LOC:");
-  canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name);
+  canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name.substring(0, 18));
 }
 
 // 3. STOCKS & ETFS (SPY, SMH, SPMO)
@@ -609,7 +609,7 @@ void renderClockScreen() {
   canvas->setTextColor(c_gray); canvas->setCursor(14, 254); canvas->print("SILICON: "); canvas->setTextColor(c_green); canvas->print("NORMAL (SAFE <105*C)");
 
   canvas->drawFastHLine(0, 296, SCREEN_W, c_dark); canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(10, 304); canvas->print("LOC:");
-  canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name);
+  canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name.substring(0, 18));
 }
 
 // 6. GRAPHICAL MOON PHASE & SOLAR TRACKER
@@ -622,7 +622,7 @@ void renderSunMoonScreen() {
 
   canvas->drawRoundRect(6, 36, SCREEN_W - 12, 50, 4, c_dark); canvas->fillRoundRect(7, 37, SCREEN_W - 14, 48, 4, 0x2120);
   canvas->setTextColor(c_amber); canvas->setTextSize(1); canvas->setCursor(14, 42); canvas->print("SUNRISE");
-  canvas->setTextColor(c_white); canvas->setTextSize(2); canvas->setCursor(14, 56); canvas->print("5:48 AM");
+  canvas->setTextColor(c_white); canvas->setTextSize(2); canvas=setCursor(14, 56); canvas->print("5:48 AM");
 
   canvas->drawRoundRect(6, 92, SCREEN_W - 12, 50, 4, c_dark); canvas->fillRoundRect(7, 93, SCREEN_W - 14, 48, 4, 0x1084);
   canvas->setTextColor(c_pink); canvas->setTextSize(1); canvas->setCursor(14, 98); canvas->print("SUNSET");
@@ -640,7 +640,7 @@ void renderSunMoonScreen() {
   canvas->setTextColor(c_white); canvas->setTextSize(2); canvas->setCursor(84, 240); canvas->print("88%");
 
   canvas->drawFastHLine(0, 296, SCREEN_W, c_dark); canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(10, 304); canvas->print("LOC:");
-  canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name);
+  canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name.substring(0, 18));
 }
 
 // Master Render Router
@@ -680,10 +680,9 @@ void setup() {
 
   if (WiFi.status() == WL_CONNECTED) {
     configTime(-7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
-    updateLocation();
   }
 
-  // Create Background FreeRTOS Task for Non-blocking Network Requests
+  // Create Background FreeRTOS Task for Non-blocking Network Requests & Auto IP Geolocation
   xTaskCreatePinnedToCore(networkWorkerTask, "NetWorker", 8192, NULL, 1, NULL, 0);
 
   renderDisplay();
@@ -719,5 +718,5 @@ void loop() {
     renderDisplay();
   }
 
-  vTaskDelay(pdMS_TO_TICKS(150)); // Yield CPU to lower power & temperature
+  vTaskDelay(pdMS_TO_TICKS(150));
 }
