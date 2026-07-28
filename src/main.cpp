@@ -42,12 +42,11 @@ enum DisplayScreen {
   SCREEN_WEATHER,
   SCREEN_CLOCK,
   SCREEN_SUN_MOON,
-  SCREEN_SYSINFO,
   NUM_SCREENS
 };
-DisplayScreen current_screen = SCREEN_CLOCK;
+DisplayScreen current_screen = SCREEN_WEATHER;
 uint32_t last_screen_switch = 0;
-const uint32_t ROTATION_INTERVAL_MS = 7000; // Rotate every 7 seconds when quiet
+const uint32_t ROTATION_INTERVAL_MS = 6000; // Rotate every 6 seconds unconditionally
 
 // Flight Data Structure
 struct FlightInfo {
@@ -134,7 +133,6 @@ String getCityName(const String& rawCode) {
   return "AIRPORT";
 }
 
-// Convert WMO Weather Code to String
 String getWeatherConditionStr(int code) {
   if (code == 0) return "CLEAR SKY";
   if (code >= 1 && code <= 3) return "PARTLY CLOUDY";
@@ -147,7 +145,6 @@ String getWeatherConditionStr(int code) {
   return "PARTLY CLOUDY";
 }
 
-// IP Geolocation API lookup
 void updateLocation() {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
@@ -167,7 +164,6 @@ void updateLocation() {
       region.toUpperCase();
       current_location_name = city + ", " + region;
       location_found = true;
-      Serial.printf("GeoLocation Success: %s (%.4f, %.4f)\n", current_location_name.c_str(), current_lat, current_lon);
     }
   }
   http.end();
@@ -179,7 +175,6 @@ void updateLocation() {
   }
 }
 
-// Fetch Weather Data via Open-Meteo Free API
 void fetchWeatherData() {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
@@ -208,7 +203,6 @@ void fetchWeatherData() {
   http.end();
 }
 
-// Route lookup via HexDB
 void updateRouteInfo(FlightInfo& flight) {
   if (WiFi.status() != WL_CONNECTED || flight.callsign.length() == 0) return;
   HTTPClient http;
@@ -251,7 +245,6 @@ void updateRouteInfo(FlightInfo& flight) {
   }
 }
 
-// Query Overhead Flights via OpenSky Network API
 void fetchOverheadFlights() {
   if (WiFi.status() != WL_CONNECTED) return;
 
@@ -331,7 +324,7 @@ void fetchOverheadFlights() {
 }
 
 // -------------------------------------------------------------
-// RENDERERS FOR EACH SCREEN VIEW
+// RENDERERS FOR EACH ROTATING SCREEN VIEW
 // -------------------------------------------------------------
 
 // 1. FLIGHT TRACKER SCREEN
@@ -346,7 +339,7 @@ void renderFlightScreen() {
 
   canvas->setTextColor(c_white); canvas->setTextSize(1); canvas->setCursor(24, 11);
   canvas->print(current_flight.active ? "LIVE OVERHEAD" : "AIRSPACE SCANNER");
-  canvas->setTextColor(c_gray); canvas->setCursor(125, 11); canvas->print("ESP-C6");
+  canvas->setTextColor(c_gray); canvas->setCursor(120, 11); canvas->print("[1/4]");
 
   if (!current_flight.active) {
     int cx = SCREEN_W / 2, cy = 160, r = 60;
@@ -423,9 +416,8 @@ void renderWeatherScreen() {
   canvas->fillCircle(12, 15, 4, c_amber);
 
   canvas->setTextColor(c_white); canvas->setTextSize(1); canvas->setCursor(24, 11); canvas->print("LOCAL WEATHER");
-  canvas->setTextColor(c_gray); canvas->setCursor(125, 11); canvas->print("OPEN-METEO");
+  canvas->setTextColor(c_gray); canvas->setCursor(120, 11); canvas->print("[2/4]");
 
-  // Main Temperature Banner
   canvas->drawRoundRect(6, 38, SCREEN_W - 12, 70, 6, c_amber);
   canvas->fillRoundRect(7, 39, SCREEN_W - 14, 68, 6, 0x2120);
 
@@ -438,14 +430,12 @@ void renderWeatherScreen() {
     canvas->print("--*");
   }
 
-  // Condition Badge
   canvas->drawRoundRect(6, 116, SCREEN_W - 12, 44, 4, c_dark);
   canvas->fillRoundRect(7, 117, SCREEN_W - 14, 42, 4, 0x1084);
   canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 122); canvas->print("CONDITION");
   canvas->setTextColor(c_cyan); canvas->setTextSize(2); canvas->setCursor(14, 136); 
   canvas->print(current_weather.valid ? current_weather.condition_str : "LOADING...");
 
-  // Humidity & Wind Cards
   canvas->drawRoundRect(6, 168, 76, 56, 4, c_dark);
   canvas->fillRoundRect(7, 169, 74, 54, 4, 0x0963);
   canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(12, 174); canvas->print("HUMIDITY");
@@ -457,7 +447,6 @@ void renderWeatherScreen() {
   canvas->setTextColor(c_white); canvas->setTextSize(2); canvas->setCursor(96, 192); canvas->printf("%.0f", current_weather.wind_mph);
   canvas->setTextSize(1); canvas->setTextColor(c_cyan); canvas->setCursor(132, 200); canvas->print("MPH");
 
-  // Forecast Card
   canvas->drawRoundRect(6, 232, SCREEN_W - 12, 58, 4, c_dark);
   canvas->fillRoundRect(7, 233, SCREEN_W - 14, 56, 4, 0x10A2);
   canvas->setTextColor(c_green); canvas->setTextSize(1); canvas->setCursor(14, 240); canvas->print("AIR QUALITY INDEX");
@@ -477,13 +466,12 @@ void renderClockScreen() {
   canvas->drawFastHLine(0, 30, SCREEN_W, c_green);
   canvas->fillCircle(12, 15, 4, c_green);
 
-  canvas->setTextColor(c_white); canvas->setTextSize(1); canvas->setCursor(24, 11); canvas->print("DIGITAL DESK CLOCK");
-  canvas->setTextColor(c_gray); canvas->setCursor(130, 11); canvas->print("NTP");
+  canvas->setTextColor(c_white); canvas->setTextSize(1); canvas->setCursor(24, 11); canvas->print("DESK CLOCK");
+  canvas->setTextColor(c_gray); canvas->setCursor(120, 11); canvas->print("[3/4]");
 
   struct tm timeinfo;
   bool time_valid = getLocalTime(&timeinfo, 100);
 
-  // Large Time Box
   canvas->drawRoundRect(6, 42, SCREEN_W - 12, 90, 6, c_green);
   canvas->fillRoundRect(7, 43, SCREEN_W - 14, 88, 6, 0x0164);
 
@@ -501,7 +489,6 @@ void renderClockScreen() {
     canvas->setTextSize(2); canvas->setTextColor(c_green); canvas->setCursor(134, 76); canvas->print("PM");
   }
 
-  // Date Card
   canvas->drawRoundRect(6, 140, SCREEN_W - 12, 48, 4, c_dark);
   canvas->fillRoundRect(7, 141, SCREEN_W - 14, 46, 4, 0x1084);
   canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 146); canvas->print("DATE");
@@ -515,7 +502,6 @@ void renderClockScreen() {
     canvas->print("MON, JUL 28");
   }
 
-  // Wi-Fi Signal & System Status
   canvas->drawRoundRect(6, 196, SCREEN_W - 12, 88, 4, c_dark);
   canvas->fillRoundRect(7, 197, SCREEN_W - 14, 86, 4, 0x0963);
   canvas->setTextColor(c_cyan); canvas->setTextSize(1); canvas->setCursor(14, 204); canvas->print("WI-FI SIGNAL");
@@ -541,27 +527,23 @@ void renderSunMoonScreen() {
   canvas->fillCircle(12, 15, 4, c_pink);
 
   canvas->setTextColor(c_white); canvas->setTextSize(1); canvas->setCursor(24, 11); canvas->print("SOLAR & LUNAR");
-  canvas->setTextColor(c_gray); canvas->setCursor(125, 11); canvas->print("SEATTLE");
+  canvas->setTextColor(c_gray); canvas->setCursor(120, 11); canvas->print("[4/4]");
 
-  // Sunrise Card
   canvas->drawRoundRect(6, 38, SCREEN_W - 12, 54, 4, c_dark);
   canvas->fillRoundRect(7, 39, SCREEN_W - 14, 52, 4, 0x2120);
   canvas->setTextColor(c_amber); canvas->setTextSize(1); canvas->setCursor(14, 44); canvas->print("SUNRISE");
   canvas->setTextColor(c_white); canvas->setTextSize(2); canvas->setCursor(14, 60); canvas->print("5:48 AM");
 
-  // Sunset Card
   canvas->drawRoundRect(6, 100, SCREEN_W - 12, 54, 4, c_dark);
   canvas->fillRoundRect(7, 101, SCREEN_W - 14, 52, 4, 0x1084);
   canvas->setTextColor(c_pink); canvas->setTextSize(1); canvas->setCursor(14, 106); canvas->print("SUNSET");
   canvas->setTextColor(c_white); canvas->setTextSize(2); canvas->setCursor(14, 122); canvas->print("8:52 PM");
 
-  // Daylight Progress Bar
   canvas->drawRoundRect(6, 162, SCREEN_W - 12, 44, 4, c_dark);
   canvas->fillRoundRect(7, 163, SCREEN_W - 14, 42, 4, 0x0963);
   canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 168); canvas->print("DAYLIGHT DURATION");
   canvas->setTextColor(c_cyan); canvas->setTextSize(1); canvas->setCursor(14, 184); canvas->print("15 HRS 04 MINS");
 
-  // Moon Phase
   canvas->drawRoundRect(6, 214, SCREEN_W - 12, 70, 4, c_dark);
   canvas->fillRoundRect(7, 215, SCREEN_W - 14, 68, 4, 0x10A2);
   canvas->setTextColor(c_green); canvas->setTextSize(1); canvas->setCursor(14, 222); canvas->print("MOON PHASE");
@@ -575,19 +557,13 @@ void renderSunMoonScreen() {
 
 // Master Render Router
 void renderDisplay() {
-  // SMART PRIORITY: Lock to Flight screen whenever a flight is overhead!
-  if (current_flight.active) {
-    current_screen = SCREEN_FLIGHT;
-  }
-
   switch (current_screen) {
     case SCREEN_FLIGHT:   renderFlightScreen(); break;
     case SCREEN_WEATHER:  renderWeatherScreen(); break;
     case SCREEN_CLOCK:    renderClockScreen(); break;
     case SCREEN_SUN_MOON: renderSunMoonScreen(); break;
-    default:              renderClockScreen(); break;
+    default:              renderWeatherScreen(); break;
   }
-
   canvas->flush();
 }
 
@@ -658,15 +634,13 @@ void loop() {
     fetchWeatherData();
   }
 
-  // Rotate screen every 7 seconds when quiet (no active plane overhead)
-  if (!current_flight.active && (millis() - last_screen_switch >= ROTATION_INTERVAL_MS)) {
+  // UNCONDITIONAL ROTATION: Rotate screen every 6 seconds between ALL 4 screens [1/4] -> [2/4] -> [3/4] -> [4/4]
+  if (millis() - last_screen_switch >= ROTATION_INTERVAL_MS) {
     last_screen_switch = millis();
     current_screen = (DisplayScreen)((current_screen + 1) % NUM_SCREENS);
-    if (current_screen == SCREEN_FLIGHT) {
-      current_screen = (DisplayScreen)(current_screen + 1);
-    }
+    Serial.printf("Screen Rotated to Mode: %d\n", (int)current_screen);
   }
 
   renderDisplay();
-  delay(current_flight.active ? 1000 : 200);
+  delay(200);
 }
