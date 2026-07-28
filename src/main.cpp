@@ -352,35 +352,50 @@ void fetchOverheadFlights() {
   http.end(); current_flight.active = false;
 }
 
-// Draw Real Graphical Moon Sphere
+// Draw Real 3D Graphical Moon Sphere (Fixed Shadow Terminator Math)
 void drawMoonSphere(int cx, int cy, int radius, float phaseFraction) {
-  uint16_t c_moon_lit  = 0xFFFF;
-  uint16_t c_moon_dark = 0x18C6;
-  uint16_t c_cater_ring = 0xD679;
+  uint16_t c_moon_lit  = 0xFFFF; // Bright Silver White
+  uint16_t c_moon_dark = 0x18C6; // Dark Mare Basalt Grey
+  uint16_t c_crater    = 0x4208; // Deep Crater Shadow
+  uint16_t c_rim       = 0x07FF; // Cyan Atmosphere Rim
 
+  // 1. Base Dark Moon Circle
   canvas->fillCircle(cx, cy, radius, c_moon_dark);
 
+  // 2. 3D Spherical Shadow Terminator Curve
+  float cosTerm = cos(phaseFraction * 2.0 * M_PI);
+
   for (int y = -radius; y <= radius; y++) {
-    int dxMax = (int)sqrt(radius * radius - y * y);
-    for (int x = -dxMax; x <= dxMax; x++) {
-      float normX = (float)x / radius;
-      float shadowX = cos(phaseFraction * 2.0 * M_PI) * normX;
-      if (phaseFraction < 0.5f) {
-        if (normX >= 0 || shadowX >= 0) {
-          canvas->drawPixel(cx + x, cy + y, c_moon_lit);
-        }
+    int r_y = (int)sqrt(radius * radius - y * y);
+    if (r_y <= 0) continue;
+    float termX = r_y * cosTerm;
+
+    for (int x = -r_y; x <= r_y; x++) {
+      bool isLit = false;
+      if (phaseFraction <= 0.5f) {
+        // Waxing Phase: Lit from Right to Left
+        isLit = ((float)x >= termX);
       } else {
-        if (normX <= 0 || shadowX <= 0) {
-          canvas->drawPixel(cx + x, cy + y, c_moon_lit);
-        }
+        // Waning Phase: Lit from Left to Right
+        isLit = ((float)x <= termX);
+      }
+
+      if (isLit) {
+        // Add subtle 3D limb shading
+        float distCenter = sqrt(x*x + y*y) / radius;
+        uint16_t litColor = (distCenter > 0.85f) ? 0xD679 : c_moon_lit;
+        canvas->drawPixel(cx + x, cy + y, litColor);
       }
     }
   }
 
-  canvas->drawCircle(cx - radius / 3, cy - radius / 4, radius / 5, c_cater_ring);
-  canvas->drawCircle(cx + radius / 4, cy + radius / 3, radius / 6, c_cater_ring);
-  canvas->drawCircle(cx - radius / 6, cy + radius / 2, radius / 7, c_cater_ring);
-  canvas->drawCircle(cx, cy, radius, 0x07FF);
+  // 3. Draw Craters on the Surface
+  canvas->drawCircle(cx - 8, cy - 6, 4, c_crater);
+  canvas->drawCircle(cx + 6, cy + 8, 5, c_crater);
+  canvas->drawCircle(cx - 4, cy + 10, 3, c_crater);
+
+  // 4. Crisp Outer Atmospheric Rim
+  canvas->drawCircle(cx, cy, radius, c_rim);
 }
 
 // -------------------------------------------------------------
@@ -596,7 +611,8 @@ void renderSunMoonScreen() {
   canvas->drawRoundRect(6, 148, SCREEN_W - 12, 140, 6, c_dark); canvas->fillRoundRect(7, 149, SCREEN_W - 14, 138, 6, 0x0963);
   canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 156); canvas->print("MOON PHASE");
 
-  drawMoonSphere(44, 218, 26, 0.65f);
+  // Render Real 3D Moon Sphere (0.35 = Waxing Gibbous)
+  drawMoonSphere(44, 218, 26, 0.35f);
 
   canvas->setTextColor(c_green); canvas->setTextSize(1); canvas->setCursor(84, 184); canvas->print("WAXING");
   canvas->setCursor(84, 198); canvas->print("GIBBOUS");
