@@ -359,14 +359,14 @@ void networkWorkerTask(void *pvParameters) {
   for (;;) {
     if (WiFi.status() == WL_CONNECTED) {
       uint32_t now = millis();
-      if (now - last_flight >= 12000)   { last_flight = now; fetchOverheadFlights(); }
+      if (now - last_flight >= 15000)   { last_flight = now; fetchOverheadFlights(); }
       if (now - last_weather >= 600000 || !current_weather.valid) { last_weather = now; fetchWeatherData(); }
       if (now - last_stock >= 300000   || !current_stocks.valid)  { last_stock = now; fetchStockData(); }
       if (now - last_rocket >= 3600000  || !current_rocket.valid)  { last_rocket = now; fetchRocketData(); }
     } else {
       WiFi.disconnect(); WiFi.reconnect();
     }
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(1500));
   }
 }
 
@@ -584,12 +584,14 @@ void renderClockScreen() {
   if (time_valid) { char dateBuf[32]; strftime(dateBuf, sizeof(dateBuf), "%a, %b %d", &timeinfo); canvas->print(dateBuf); }
   else { canvas->print("MON, JUL 28"); }
 
+  // Thermal & Silicon Diagnostic Card
   canvas->drawRoundRect(6, 186, SCREEN_W - 12, 102, 4, c_dark); canvas->fillRoundRect(7, 187, SCREEN_W - 14, 100, 4, 0x0963);
   canvas->setTextColor(c_cyan); canvas->setTextSize(1); canvas->setCursor(14, 194); canvas->print("ESP32-C6 THERMALS");
   float chipTemp = temperatureRead();
-  canvas->setTextColor(chipTemp > 55.0f ? 0xF800 : c_green); canvas->setTextSize(2); canvas->setCursor(14, 212); canvas->printf("%.1f *C", chipTemp);
-  canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 238); canvas->print("BACKLIGHT: "); canvas->setTextColor(c_white); canvas->print("50%");
-  canvas->setTextColor(c_gray); canvas->setCursor(14, 254); canvas->print("POWER: "); canvas->setTextColor(c_green); canvas->print("COOL & LOW POWER");
+  uint16_t tempColor = chipTemp > 65.0f ? 0xF800 : (chipTemp > 50.0f ? c_amber : c_green);
+  canvas->setTextColor(tempColor); canvas->setTextSize(2); canvas->setCursor(14, 212); canvas->printf("%.1f *C", chipTemp);
+  canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 238); canvas->print("BACKLIGHT: "); canvas->setTextColor(c_white); canvas->print("30% (COOL)");
+  canvas->setTextColor(c_gray); canvas->setCursor(14, 254); canvas->print("SILICON: "); canvas->setTextColor(c_green); canvas->print("NORMAL (SAFE <105*C)");
 
   canvas->drawFastHLine(0, 296, SCREEN_W, c_dark); canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(10, 304); canvas->print("LOC:");
   canvas->setTextColor(c_cyan); canvas->setCursor(38, 304); canvas->print(current_location_name);
@@ -614,7 +616,6 @@ void renderSunMoonScreen() {
   canvas->drawRoundRect(6, 148, SCREEN_W - 12, 140, 6, c_dark); canvas->fillRoundRect(7, 149, SCREEN_W - 14, 138, 6, 0x0963);
   canvas->setTextColor(c_gray); canvas->setTextSize(1); canvas->setCursor(14, 156); canvas->print("MOON PHASE");
 
-  // Render Real 3D Moon Sphere (0.35 = Waxing Gibbous)
   drawMoonSphere(44, 218, 26, 0.35f);
 
   canvas->setTextColor(c_green); canvas->setTextSize(1); canvas->setCursor(84, 184); canvas->print("WAXING");
@@ -649,9 +650,9 @@ void setup() {
   pinMode(BOOT_BTN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(BOOT_BTN), handleBootButtonISR, FALLING);
 
-  // 50% PWM Backlight Dimming (LEDC duty 128/255 = 50% brightness)
+  // 30% PWM Backlight Dimming (LEDC duty 75/255 = 30% brightness for ultra-cool operation)
   ledcAttach(TFT_BL, 5000, 8);
-  ledcWrite(TFT_BL, 128);
+  ledcWrite(TFT_BL, 75);
 
   display->begin(); display->fillScreen(0x0000); canvas->begin();
 
@@ -663,7 +664,7 @@ void setup() {
     updateLocation();
   }
 
-  // Create Background FreeRTOS Task for Non-blocking Network Requests!
+  // Create Background FreeRTOS Task for Non-blocking Network Requests
   xTaskCreatePinnedToCore(networkWorkerTask, "NetWorker", 8192, NULL, 1, NULL, 0);
 
   renderDisplay();
@@ -680,7 +681,7 @@ void loop() {
       last_screen_switch = now;
       current_screen = (DisplayScreen)((current_screen + 1) % NUM_SCREENS);
       Serial.printf("Instant BOOT Button Triggered! Skipped to Screen: %d\n", (int)current_screen);
-      renderDisplay(); // Instant 15ms display flip!
+      renderDisplay();
     }
   }
 
@@ -691,5 +692,5 @@ void loop() {
   }
 
   renderDisplay();
-  delay(100);
+  vTaskDelay(pdMS_TO_TICKS(120)); // Yield CPU to lower power & temperature
 }
