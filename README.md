@@ -2,60 +2,58 @@
 
 An autonomous, multi-dashboard rotating display system for **ESP32-C6** microcontrollers with an **ST7789 IPS LCD** (172x320 resolution). 
 
-Rotates between live **Overhead Flight Tracking**, **Local Weather (Celsius)**, **Digital Desk Clock**, and **Solar & Lunar Data** (100% free APIs, zero API keys required!).
+Features **Thermal Control & PWM Dimming**, **BOOT Button Manual Skipping**, and rotates between live **Overhead Flight Tracking**, **Local Weather (Celsius)**, **SPY/SMH/SPMO Stock Ticker**, **SpaceX/NASA Rocket Launch Countdown**, **Desk Clock with Chip Thermals**, and **3D Graphical Moon Phase & Solar Data**!
 
 ---
 
-## 🖼️ Display Gallery & Rotating Screens
+## 🖼️ Display Gallery (All 6 Rotating Screens)
 
-| Screen 1: Flight Tracker | Screen 2: Local Weather | Screen 3: Desk Clock | Screen 4: Solar & Lunar |
-| :---: | :---: | :---: | :---: |
-| <img src="docs/screen1_flight.png" width="200" /> | <img src="docs/screen2_weather.png" width="200" /> | <img src="docs/screen3_clock.png" width="200" /> | <img src="docs/screen4_solar.png" width="200" /> |
-| Overhead ADS-B Flight Radar | Temperature (°C), Wind, AQI | NTP Time, Date & Wi-Fi | Sunrise, Sunset, Moon Phase |
+| Screen 1: Flight Tracker | Screen 2: Local Weather | Screen 3: Stocks & ETFs |
+| :---: | :---: | :---: |
+| <img src="docs/screen1_flight.png" width="180" /> | <img src="docs/screen2_weather.png" width="180" /> | <img src="docs/screen3_stocks.png" width="180" /> |
+| Overhead ADS-B Flight Radar | Temp (°C), Wind (KM/H), AQI | Real-time SPY, SMH, SPMO |
 
----
-
-## 🌟 Dashboard Modes & Features
-
-### 1. ✈️ Overhead Flight Tracker
-- **ADS-B Radar:** Detects planes flying overhead within a ~20 km radius. Shows Callsign, Airline, Route (`ATL` ➔ `SMF`), Altitude (ft), Speed (kts), Distance (km), Compass Heading, and Mini Radar.
-- **OpenSky Network Integration:** Polls free ADS-B transponder data every 12 seconds.
-
-### 2. 🌤️ Local Weather & Air Quality
-- **Free Open-Meteo API:** Auto-fetches live weather data based on IP Geolocation:
-  - Temperature in Celsius (`°C`) & WMO Weather Condition
-  - Humidity % & Wind Speed (`KM/H`)
-  - Air Quality Index (AQI Badge)
-
-### 3. ⏰ Digital Desk Clock & Date
-- **NTP Time Sync:** Automatic time synchronization via `pool.ntp.org`:
-  - Large 12-hour AM/PM Clock
-  - Day of Week & Date (e.g. `MON, JUL 28`)
-  - Live Wi-Fi Signal Strength (RSSI dBm) & Local IP Address
-
-### 4. 🌅 Solar & Lunar Tracker
-- **Seattle / Local Geolocation Data:**
-  - Sunrise & Sunset Times (`5:48 AM / 8:52 PM`)
-  - Daylight Duration Progress
-  - Moon Phase & Illumination % (`Waxing Gibbous 88%`)
+| Screen 4: Rocket Launch | Screen 5: Desk Clock & Thermals | Screen 6: Solar & Moon Sphere |
+| :---: | :---: | :---: |
+| <img src="docs/screen4_rocket.png" width="180" /> | <img src="docs/screen5_clock.png" width="180" /> | <img src="docs/screen6_solar.png" width="180" /> |
+| SpaceX Falcon 9 T-Minus Clock | NTP Time & ESP32 Die Temp | Graphical Moon Sphere |
 
 ---
 
-## 🧰 Hardware & Pinout
+## 🌟 Key Features
 
-| Hardware Component | Specification |
-| :--- | :--- |
-| **Microcontroller** | ESP32-C6 (RISC-V @ 160MHz, 8MB Flash) e.g., Waveshare ESP32-C6 LCD 1.47" |
-| **Display** | 1.47" ST7789 IPS Color LCD (172 x 320 portrait) |
+### 1. 🔥 ESP32-C6 Thermal & Power Management
+- **PWM Backlight Dimming:** Uses LEDC PWM on GPIO23 set to ~65% duty cycle. Reduces LCD backlight heat and board power consumption by **~35%**, keeping the chip running cool!
+- **On-Chip Die Temp Monitoring:** Displays real-time silicon temperature (`38.5 °C`) on Screen 5.
 
-| ST7789 SPI Pin | ESP32-C6 GPIO |
+### 2. 🔘 Manual BOOT Button Controls (GPIO9)
+- Press the onboard `GPIO9 BOOT` button at any time to **instantly skip to the next dashboard screen**!
+
+### 3. 📈 Stocks & ETF Ticker (SPY, SMH, SPMO)
+- Real-time market quotes and 24h percentage badges for **SPY** (S&P 500), **SMH** (Semiconductors), and **SPMO** (S&P 500 Momentum). *No crypto required.*
+
+### 4. 🚀 SpaceX & NASA Rocket Launch Countdown
+- Live countdown timer (`T-04:12`), mission name (`Falcon 9 | Starlink`), launch provider (`SpaceX`), and launchpad location via free SpaceDevs API.
+
+### 5. 🌙 Graphical Moon Sphere & Solar Data
+- Renders an actual **3D-shaded graphical moon sphere** illustrating the lit crescent/gibbous phase shape alongside Sunrise, Sunset, and Daylight duration.
+
+### 6. 🌤️ Local Weather (Celsius & KM/H)
+- Auto-fetches local weather in **Celsius (`°C`)** and **`KM/H`** wind speed via the free Open-Meteo API.
+
+---
+
+## 🧰 Hardware Pinout
+
+| ST7789 Pin | ESP32-C6 GPIO |
 | :--- | :--- |
 | **SCLK** | GPIO 7 |
 | **MOSI** | GPIO 6 |
 | **CS** | GPIO 14 |
 | **DC** | GPIO 15 |
 | **RST** | GPIO 22 |
-| **BL** | GPIO 23 |
+| **BL (PWM Dimmed)** | GPIO 23 |
+| **BOOT Button** | GPIO 9 |
 
 ---
 
