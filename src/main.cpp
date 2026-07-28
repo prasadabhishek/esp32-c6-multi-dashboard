@@ -176,7 +176,7 @@ void updateLocation() {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
   http.begin("http://ip-api.com/json/");
-  http.setTimeout(4000);
+  http.setTimeout(2500);
   int httpCode = http.GET();
   if (httpCode == HTTP_CODE_OK) {
     String payload = http.getString();
@@ -206,7 +206,7 @@ void fetchWeatherData() {
   String url = "https://api.open-meteo.com/v1/forecast?latitude=" + String(current_lat, 4) +
                "&longitude=" + String(current_lon, 4) +
                "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&temperature_unit=celsius&wind_speed_unit=kmh";
-  http.begin(url); http.setTimeout(4000);
+  http.begin(url); http.setTimeout(2500);
   if (http.GET() == HTTP_CODE_OK) {
     JsonDocument doc;
     if (!deserializeJson(doc, http.getString()) && doc["current"].is<JsonObject>()) {
@@ -228,7 +228,7 @@ void fetchStockData() {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
   http.begin("https://query1.finance.yahoo.com/v7/finance/quote?symbols=SPY,SMH,SPMO");
-  http.setTimeout(4000);
+  http.setTimeout(2500);
   if (http.GET() == HTTP_CODE_OK) {
     JsonDocument doc;
     if (!deserializeJson(doc, http.getString()) && doc["quoteResponse"]["result"].is<JsonArray>()) {
@@ -260,7 +260,7 @@ void fetchRocketData() {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
   http.begin("https://ll.thespacedevs.com/2.2.0/launch/upcoming/?limit=1");
-  http.setTimeout(4000);
+  http.setTimeout(2500);
   if (http.GET() == HTTP_CODE_OK) {
     JsonDocument doc;
     if (!deserializeJson(doc, http.getString()) && doc["results"].is<JsonArray>() && doc["results"].size() > 0) {
@@ -287,7 +287,7 @@ void updateRouteInfo(FlightInfo& flight) {
   if (WiFi.status() != WL_CONNECTED || flight.callsign.length() == 0) return;
   HTTPClient http;
   http.begin("https://hexdb.io/api/v1/route/icao/" + flight.callsign);
-  http.setTimeout(3000);
+  http.setTimeout(2000);
   if (http.GET() == HTTP_CODE_OK) {
     JsonDocument doc;
     if (!deserializeJson(doc, http.getString()) && doc["route"].is<String>()) {
@@ -318,7 +318,7 @@ void fetchOverheadFlights() {
                "&lomax=" + String(current_lon + delta_lon, 4);
 
   HTTPClient http;
-  http.begin(url); http.setTimeout(5000);
+  http.begin(url); http.setTimeout(3000);
   if (http.GET() == HTTP_CODE_OK) {
     JsonDocument doc;
     if (!deserializeJson(doc, http.getString()) && doc["states"].is<JsonArray>()) {
@@ -352,17 +352,32 @@ void fetchOverheadFlights() {
   http.end(); current_flight.active = false;
 }
 
-// Draw Real 3D Graphical Moon Sphere (Fixed Shadow Terminator Math)
+// Non-blocking FreeRTOS Background Network Task
+void networkWorkerTask(void *pvParameters) {
+  uint32_t last_flight = 0, last_weather = 0, last_stock = 0, last_rocket = 0;
+
+  for (;;) {
+    if (WiFi.status() == WL_CONNECTED) {
+      uint32_t now = millis();
+      if (now - last_flight >= 12000)   { last_flight = now; fetchOverheadFlights(); }
+      if (now - last_weather >= 600000 || !current_weather.valid) { last_weather = now; fetchWeatherData(); }
+      if (now - last_stock >= 300000   || !current_stocks.valid)  { last_stock = now; fetchStockData(); }
+      if (now - last_rocket >= 3600000  || !current_rocket.valid)  { last_rocket = now; fetchRocketData(); }
+    } else {
+      WiFi.disconnect(); WiFi.reconnect();
+    }
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  }
+}
+
+// Draw Real 3D Graphical Moon Sphere
 void drawMoonSphere(int cx, int cy, int radius, float phaseFraction) {
   uint16_t c_moon_lit  = 0xFFFF; // Bright Silver White
   uint16_t c_moon_dark = 0x18C6; // Dark Mare Basalt Grey
   uint16_t c_crater    = 0x4208; // Deep Crater Shadow
   uint16_t c_rim       = 0x07FF; // Cyan Atmosphere Rim
 
-  // 1. Base Dark Moon Circle
   canvas->fillCircle(cx, cy, radius, c_moon_dark);
-
-  // 2. 3D Spherical Shadow Terminator Curve
   float cosTerm = cos(phaseFraction * 2.0 * M_PI);
 
   for (int y = -radius; y <= radius; y++) {
@@ -371,17 +386,8 @@ void drawMoonSphere(int cx, int cy, int radius, float phaseFraction) {
     float termX = r_y * cosTerm;
 
     for (int x = -r_y; x <= r_y; x++) {
-      bool isLit = false;
-      if (phaseFraction <= 0.5f) {
-        // Waxing Phase: Lit from Right to Left
-        isLit = ((float)x >= termX);
-      } else {
-        // Waning Phase: Lit from Left to Right
-        isLit = ((float)x <= termX);
-      }
-
+      bool isLit = (phaseFraction <= 0.5f) ? ((float)x >= termX) : ((float)x <= termX);
       if (isLit) {
-        // Add subtle 3D limb shading
         float distCenter = sqrt(x*x + y*y) / radius;
         uint16_t litColor = (distCenter > 0.85f) ? 0xD679 : c_moon_lit;
         canvas->drawPixel(cx + x, cy + y, litColor);
@@ -389,12 +395,9 @@ void drawMoonSphere(int cx, int cy, int radius, float phaseFraction) {
     }
   }
 
-  // 3. Draw Craters on the Surface
   canvas->drawCircle(cx - 8, cy - 6, 4, c_crater);
   canvas->drawCircle(cx + 6, cy + 8, 5, c_crater);
   canvas->drawCircle(cx - 4, cy + 10, 3, c_crater);
-
-  // 4. Crisp Outer Atmospheric Rim
   canvas->drawCircle(cx, cy, radius, c_rim);
 }
 
@@ -658,45 +661,35 @@ void setup() {
   if (WiFi.status() == WL_CONNECTED) {
     configTime(-7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
     updateLocation();
-    fetchWeatherData();
-    fetchStockData();
-    fetchRocketData();
   }
 
-  fetchOverheadFlights();
+  // Create Background FreeRTOS Task for Non-blocking Network Requests!
+  xTaskCreatePinnedToCore(networkWorkerTask, "NetWorker", 8192, NULL, 1, NULL, 0);
+
   renderDisplay();
 }
 
 void loop() {
-  static uint32_t last_flight_fetch = 0;
-  static uint32_t last_weather_fetch = 0;
-  static uint32_t last_stock_fetch = 0;
-
-  if (WiFi.status() != WL_CONNECTED) { WiFi.disconnect(); WiFi.reconnect(); }
-
-  // Hardware Interrupt Handler for Right BOOT Button (GPIO9)
+  // 1. Instantaneous Hardware Interrupt Handler for Right BOOT Button (GPIO9)
   if (g_btn_interrupt_flag) {
     g_btn_interrupt_flag = false;
     static uint32_t last_btn_press = 0;
     uint32_t now = millis();
-    if (now - last_btn_press > 300) {
+    if (now - last_btn_press > 250) {
       last_btn_press = now;
       last_screen_switch = now;
       current_screen = (DisplayScreen)((current_screen + 1) % NUM_SCREENS);
-      Serial.printf("ISR BOOT Button Triggered! Skipped to Screen: %d\n", (int)current_screen);
-      renderDisplay();
+      Serial.printf("Instant BOOT Button Triggered! Skipped to Screen: %d\n", (int)current_screen);
+      renderDisplay(); // Instant 15ms display flip!
     }
   }
 
-  if (millis() - last_flight_fetch >= 12000) { last_flight_fetch = millis(); fetchOverheadFlights(); }
-  if (millis() - last_weather_fetch >= 600000 || !current_weather.valid) { last_weather_fetch = millis(); fetchWeatherData(); }
-  if (millis() - last_stock_fetch >= 300000 || !current_stocks.valid) { last_stock_fetch = millis(); fetchStockData(); }
-
+  // 2. Automatic 6-second rotation
   if (millis() - last_screen_switch >= ROTATION_INTERVAL_MS) {
     last_screen_switch = millis();
     current_screen = (DisplayScreen)((current_screen + 1) % NUM_SCREENS);
   }
 
   renderDisplay();
-  delay(150);
+  delay(100);
 }
